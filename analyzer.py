@@ -12,7 +12,7 @@ from db import get_conn, find_similar, save_session
 
 
 OLLAMA_URL = "http://localhost:11434"
-EMBED_MODEL = "mxbai-embed-large"
+EMBED_MODEL = "nomic-embed-text"
 LLM_MODEL = "qwen2.5:3b"
 
 
@@ -79,6 +79,23 @@ Reply in ONE short sentence. Example: "Use Sonnet — similar tasks worked well 
     return None
 
 
+def embed_batch(texts: list[str]) -> list[list[float]] | None:
+    """Embed multiple texts in one API call."""
+    try:
+        r = requests.post(
+            f"{OLLAMA_URL}/api/embed",
+            json={"model": EMBED_MODEL, "input": texts},
+            timeout=300,
+        )
+        r.raise_for_status()
+        embeddings = r.json().get("embeddings")
+        if isinstance(embeddings, list) and len(embeddings) == len(texts):
+            return embeddings
+    except Exception as e:
+        print(f"  Batch embed error: {e}")
+    return None
+
+
 def embed_all_sessions():
     """Backfill embeddings for all sessions that don't have one."""
     conn = get_conn()
@@ -92,24 +109,34 @@ def embed_all_sessions():
     cur.close()
     conn.close()
 
-    print(f"Embedding {len(rows)} sessions...")
+    if not rows:
+        print("Нічого ембедити.")
+        return
+
+    print(f"Embedding {len(rows)} sessions (chunks of 10)...")
+    CHUNK = 10
     ok = 0
-    for session_id, message in rows:
-        emb = embed(message)
-        if emb:
-            conn = get_conn()
-            cur = conn.cursor()
+    for i in range(0, len(rows), CHUNK):
+        chunk = rows[i:i + CHUNK]
+        ids = [r[0] for r in chunk]
+        texts = [r[1] for r in chunk]
+        print(f"  Chunk {i//CHUNK + 1}: {len(texts)} texts...")
+        embeddings = embed_batch(texts)
+        if not embeddings:
+            print(f"  Chunk failed, skipping.")
+            continue
+        conn = get_conn()
+        cur = conn.cursor()
+        for session_id, emb in zip(ids, embeddings):
             cur.execute(
                 "UPDATE sessions SET embedding = %s WHERE session_id = %s",
                 (emb, session_id)
             )
-            conn.commit()
-            cur.close()
-            conn.close()
             ok += 1
-            print(f"  ✓ {session_id[:8]}")
-        else:
-            print(f"  · {session_id[:8]} skipped")
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"  ✓ {ok} total done")
 
     print(f"Done: {ok}/{len(rows)} embedded.")
 

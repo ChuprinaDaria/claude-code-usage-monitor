@@ -10,6 +10,7 @@ Usage: add to ~/.bashrc or use as wrapper script.
 import sys
 import os
 import json
+import subprocess
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -47,12 +48,12 @@ def get_latest_session_id() -> str | None:
 def ask_outcome() -> str | None:
     """Ask user about the session outcome."""
     print("\n" + "─" * 50)
-    print("  Claude Monitor — оцінка сесії")
+    print("  Claude Monitor — session outcome")
     print("─" * 50)
-    print("  Задача вирішена? Як? (Enter = пропустити)")
-    print("  Приклади: 'так, баг пофіксено'")
-    print("            'частково, залишився деплой'")
-    print("            'ні, неправильно зрозумів задачу'")
+    print("  Task completed? How? (Enter = skip)")
+    print("  Examples: 'yes, bug fixed'")
+    print("            'partially, deploy still pending'")
+    print("            'no, misunderstood the task'")
     print("─" * 50)
 
     try:
@@ -75,38 +76,20 @@ def save_outcome(session_id: str, outcome: str):
         conn.commit()
         cur.close()
         conn.close()
-        print(f"  ✓ Збережено\n")
+        print(f"  ✓ Saved\n")
     except Exception as e:
         print(f"  DB error: {e}\n")
 
 
 def embed_session(session_id: str):
-    """Embed current session silently."""
+    """Trigger embedding in background (non-blocking)."""
     try:
-        import psycopg2
-        from analyzer import embed
-        conn = psycopg2.connect(dbname="claude_monitor")
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT first_user_message FROM sessions WHERE session_id = %s AND embedding IS NULL",
-            (session_id,)
+        monitor_dir = Path(__file__).parent
+        subprocess.Popen(
+            [sys.executable, str(monitor_dir / "analyzer.py")],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        if row and row[0]:
-            emb = embed(row[0])
-            if emb:
-                conn = psycopg2.connect(dbname="claude_monitor")
-                cur = conn.cursor()
-                cur.execute(
-                    "UPDATE sessions SET embedding = %s WHERE session_id = %s",
-                    (emb, session_id)
-                )
-                conn.commit()
-                cur.close()
-                conn.close()
-                print("  ✓ Ембединг збережено\n")
     except Exception:
         pass
 
@@ -120,7 +103,7 @@ def run():
     if outcome:
         save_outcome(session_id, outcome)
     else:
-        print("  Пропущено\n")
+        print("  Skipped\n")
 
     embed_session(session_id)
 
