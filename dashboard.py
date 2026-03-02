@@ -4,6 +4,8 @@ Claude Monitor Dashboard — terminal Matrix style.
 """
 
 import re
+import sys
+import time
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
@@ -15,12 +17,83 @@ DIM    = "\033[2m"
 BOLD   = "\033[1m"
 RESET  = "\033[0m"
 CLEAR  = "\033[2J\033[H"
+YEL    = "\033[93m"
+RED    = "\033[91m"
+CYA    = "\033[96m"
 
 
 def g(t):   return f"{GREEN}{t}{RESET}"
 def dg(t):  return f"{DGREEN}{t}{RESET}"
 def dim(t): return f"{DIM}{t}{RESET}"
 def plain(t): return re.sub(r'\033\[[0-9;]*m', '', t)
+
+
+def animate_startup():
+    """8-bit boot sequence. Very important. Do not skip."""
+
+    BOOT_STEPS = [
+        ("LOADING TOKEN HARVESTER 3000",          True),
+        ("INITIALIZING REGRET DATABASE",          True),
+        ("CALIBRATING VIBE DETECTOR",             True),
+        ("CHECKING IF AI TOOK YOUR JOB",          False),
+        ("SUPPRESSING EXISTENTIAL DREAD",         True),
+        ("COUNTING BUGS YOU WROTE TODAY",         True),
+        ("CONVINCING SELF: I AM PRODUCTIVE",      True),
+        ("UPLOADING BRAIN TO THE CLOUD",          True),
+    ]
+
+    print(CLEAR, end="")
+
+    bios = [
+        f"  {YEL}╔══════════════════════════════════════════════╗",
+        f"  ║   ▄█████╗  CLAUDEOS v1.0 · BIOS v69.420    ║",
+        f"  ║   █◉  ◉█   640K RAM DETECTED (it's enough™) ║",
+        f"  ║   ██▄▄██   CPU: VERY BIG BRAIN  FAN: LOUD   ║",
+        f"  ║   ◥████◤   PRESS F1 TO REGRET THIS PROJECT  ║",
+        f"  ╚══════════════════════════════════════════════╝{RESET}",
+    ]
+    for line in bios:
+        print(line)
+        time.sleep(0.07)
+
+    print()
+    time.sleep(0.2)
+
+    BAR_W = 14
+    spin  = r"|/-\\"
+    for label, ok in BOOT_STEPS:
+        for j in range(BAR_W + 1):
+            filled = "█" * j + "░" * (BAR_W - j)
+            s = spin[j % 4]
+            sys.stdout.write(f"\r  {s} [{filled}] {label:<44}")
+            sys.stdout.flush()
+            time.sleep(0.018)
+        if ok:
+            sys.stdout.write(
+                f"\r  {GREEN}✓{RESET} [{GREEN}{'█'*BAR_W}{RESET}] {label:<44} {GREEN}OK{RESET}\n"
+            )
+        else:
+            sys.stdout.write(
+                f"\r  {RED}✗{RESET} [{RED}{'█'*BAR_W}{RESET}] {label:<44} {RED}FAIL{RESET}\n"
+            )
+        sys.stdout.flush()
+        time.sleep(0.04)
+
+    print()
+
+    # pac-man eating tokens
+    DOTS = 30
+    for i in range(DOTS + 1):
+        pm   = "ᗧ" if i % 2 == 0 else "ᗤ"
+        line = " " * i + pm + "·" * (DOTS - i) + "🍒"
+        sys.stdout.write(f"\r  {CYA}{line}{RESET}   ")
+        sys.stdout.flush()
+        time.sleep(0.035)
+
+    print(f"\n\n  {YEL}*CHOMP*  {DOTS} TOKENS CONSUMED.{RESET}")
+    print(f"  {DIM}productivity level: statistically indistinguishable from zero{RESET}")
+    print()
+    time.sleep(0.8)
 
 
 def get_conn():
@@ -147,6 +220,7 @@ def render(stats: dict):
 
 def main():
     try:
+        animate_startup()
         render(fetch_stats())
     except Exception as e:
         print(f"Error: {e}")
